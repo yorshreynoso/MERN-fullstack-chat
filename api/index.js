@@ -4,9 +4,11 @@ const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+const bcrypt = require('bcryptjs');
 
 dotenv.config();
-const jwtSecret =process.env.JWT_SECRET;
+const jwtSecret = process.env.JWT_SECRET;
+const bcryptSalt = bcrypt.genSaltSync(10);
 const User = require('./models/User');
 const CLIENT_URL = process.env.CLIENT_URL;
 
@@ -51,12 +53,32 @@ app.get('/profile', (req, res) => {
 })
 
 
+app.post('/login', async(req, res) => {
+    const {username, password} = req.body;
+    const foundUser = await User.findOne({username});
+    
+    if(foundUser) {
+        const passOK = bcrypt.compareSync(password, foundUser.password);
+        if(passOK) {
+            jwt.sign({userId: foundUser._id, username }, jwtSecret, {}, (err, token) => {
+                res.cookie('token', token, {sameSite:'none', secure: true}).json( {
+                     id:foundUser._id
+                });
+            });
+                
+        }
+    }
+})
+
 app.post('/register', async (req, res) => {
-    console.log('esta entrando');
     const {username, password} = req.body;
 
     try {
-        const createdUser = await User.create({username, password});
+        const hashedPassword = bcrypt.hashSync(password, bcryptSalt);
+        const createdUser = await User.create({
+            username, 
+            password: hashedPassword
+        });
         //await jwt.sign({userId: createdUser._id}, jwtSecret); await, another way to do it
         jwt.sign({userId: createdUser._id, username}, jwtSecret, {}, (err, token) => {
             if(err) throw err;
